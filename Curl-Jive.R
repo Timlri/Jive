@@ -1,6 +1,7 @@
 library(RCurl)
 library(jsonlite)
 library(XML)
+library(httr)
 
 options(stringsAsFactors = FALSE)
 
@@ -25,42 +26,86 @@ opts         <- curlOptions(header = FALSE, verbose=TRUE, netrc = TRUE)
 cmd1 <- "auth/login?" 
 auth <- postForm(paste(url1,cmd1,clientId,"&",clientSecret,sep=""))
 
-headers <- list('Authorization' = auth[1])
+# look for recent popular unanswered questions
+filt1   <- paste("filter=match(resolved,false)&",           # unanswered
+                  "activity(view)&",                        # views
+                  "type(thread)&",                          # from a thread
+                  "match(isQuestion,true)&",                # its a question
+                  "count=all",sep="")                       # get all of them
 
-### Get a list of activity in lastday
-cmd2 <- "export/activity/lastday"
-g2   <- getForm(paste(url2,cmd2,sep=""), .opts=list(httpheader=headers))
+url1  <- "https://api.jivesoftware.com/analytics/v2/export/activity/lastweek?"
+req   <- GET(paste(url1,filt1,sep=""), 
+             config(httpheader=c("Authorization"= auth[1]))) # get the url
+json  <- content(req, as = "text")                           # parse
+act   <- fromJSON(json)                                      # convert from JSON
+act.list <- act$list                                         # list of activities
 
-###  Get
-opts <- curlOptions(header = FALSE, verbose=TRUE, netrc = TRUE, include = TRUE)
-cmd3 <- "export/activity/csv/place?count=20"
-g3   <- getForm(paste(url1,cmd3,sep=""), .opts=list(httpheader=headers))
+#############################################################
+#
+# Description of act.list
+#
+#$ :List of 12
+#..$ name            : chr "ACTIVITY_RESOLVED_QUESTION"
+#..$ timestamp       : num 1.43e+12
+#..$ context         : List of 1
+#..$ payload         : Named list()
+#..$ actorID         : int 10967201
+#..$ actorType       : int 3
+#..$ activityType    : chr "Resolved"
+#..$ actionObjectId  : int 115657926
+#..$ actionObjectType: int 27
+#..$ containerId     : int 2280
+#..$ containerType   : int 14
+#..$ activity        : List of 5
+#############################################################
 
-url <- paste(url1,cmd3,sep="")
-g6   <- fromJSON(txt=url)
+activityName  <- act$list$name
+timestamps    <- act$list$timestamp
+actorIDs      <- act$list$actorID
+actionObjId   <- act$list$actionObjectId
+containerId   <- act$list$containerId
+actionObject  <- act$list$activity$actionObject
+username      <- act$list$activity$actor$username
+email         <- act$list$activity$actor$email
+actorType     <- act$list$actorType
+objectType    <- act$list$activity$actionObject$objectType
+open          <- act$list$activity$actionObject$open
+objectId      <- act$list$activity$actionObject$objectId
+status        <- act$list$activity$actionObject$status  
+activityType  <- act$list$activityType
+containerType <- act$list$containerType
+name          <- act$list$activity$destination$name
 
-### How many users logged in during the last hour
-cmd4 <- "export/activity/lasthour?filter=action(Login)"
-g4   <- getForm(paste(url2,cmd4,sep=""), .opts=list(httpheader=headers))
+df <- data.frame(activityName,actorIDs,actionObjId,
+                 containerId,username,email,actorType,
+                 objectType,open,objectId,status,
+                 activityType,containerType,name)
 
-### Get latest create events
-cmd5 <- "export/activity/lastday?filter=action(Create)"
-g5   <- getForm(paste(url2,cmd5,sep=""), .opts=list(httpheader=headers))
+# Remove Expert Forums
+df <- df[substr(df$name,nchar(df$name)-2,nchar(df$name)) != " EF", ]
 
-### read jive activity
-url  <- "https://api.jivesoftware.com/analytics/v2/export/activity/lastday"
-req  <- GET(url, config(httpheader = c("Authorization" = auth[1])))
-json <- content(req, as = "text")
-act  <- fromJSON(json)
-x <- act$list
-
-
-
-
-  
+write.csv(df,"fof.csv")
 
 
 
 
 
 
+
+
+
+
+
+
+
+
+
+filt2 <- paste("filter=match(activity.actionObject.isQuestion,true)&",
+               "additionalFields=activity.actionObject.assumedResolved,",
+               "activity.actionObject.questionStatus",sep="")
+url2  <- "https://api.jivesoftware.com/analytics/v2/export/activity/lastweek?"
+req   <- GET(paste(url1,filt2,sep=""), 
+             config(httpheader=c("Authorization"= auth[1]))) # get the url
+json  <- content(req, as = "text")                           # parse
+act   <- fromJSON(json)                                      # convert from JSON
+act.list <- act$list                                         # list of activities
