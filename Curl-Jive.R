@@ -61,10 +61,10 @@ act.list <- act$list                                         # list of activitie
 
 activityName  <- act$list$name
 timestamps    <- act$list$timestamp
+datetime      <- as.POSIXct(timestamps/1000, origin="1970-01-01")
 actorIDs      <- act$list$actorID
 actionObjId   <- act$list$actionObjectId
 containerId   <- act$list$containerId
-actionObject  <- act$list$activity$actionObject
 username      <- act$list$activity$actor$username
 email         <- act$list$activity$actor$email
 actorType     <- act$list$actorType
@@ -76,7 +76,7 @@ activityType  <- act$list$activityType
 containerType <- act$list$containerType
 name          <- act$list$activity$destination$name
 
-df <- data.frame(activityName,actorIDs,actionObjId,
+df <- data.frame(activityName,timestamps,datetime,actorIDs,actionObjId,
                  containerId,username,email,actorType,
                  objectType,open,objectId,status,
                  activityType,containerType,name)
@@ -85,27 +85,3 @@ df <- data.frame(activityName,actorIDs,actionObjId,
 df <- df[substr(df$name,nchar(df$name)-2,nchar(df$name)) != " EF", ]
 
 write.csv(df,"fof.csv")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-filt2 <- paste("filter=match(activity.actionObject.isQuestion,true)&",
-               "additionalFields=activity.actionObject.assumedResolved,",
-               "activity.actionObject.questionStatus",sep="")
-url2  <- "https://api.jivesoftware.com/analytics/v2/export/activity/lastweek?"
-req   <- GET(paste(url1,filt2,sep=""), 
-             config(httpheader=c("Authorization"= auth[1]))) # get the url
-json  <- content(req, as = "text")                           # parse
-act   <- fromJSON(json)                                      # convert from JSON
-act.list <- act$list                                         # list of activities
