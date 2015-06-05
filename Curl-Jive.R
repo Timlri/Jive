@@ -22,23 +22,26 @@ url2         <- "https://api.jivesoftware.com/analytics/v2/"
 opts         <- curlOptions(header = FALSE, verbose=TRUE, netrc = TRUE)
 #                    userpwd = "username:password", netrc = FALSE)
 
-### Get authorization header
+### First, get authorization header by passing clientId/clientSecret
 cmd1 <- "auth/login?" 
 auth <- postForm(paste(url1,cmd1,clientId,"&",clientSecret,sep=""))
 
-# look for recent popular unanswered questions
+### Use date range of last 7 days
+after  <- paste("after=",as.Date(Sys.Date()) - 2,"T00:00:00-0400&",sep="")
+
+### look for recent popular unanswered questions
 filt1   <- paste("filter=match(resolved,false)&",           # unanswered
                   "activity(view)&",                        # views
                   "type(thread)&",                          # from a thread
                   "match(isQuestion,true)&",                # its a question
+                  after,
                   "count=all",sep="")                       # get all of them
 
-url1  <- "https://api.jivesoftware.com/analytics/v2/export/activity/lastweek?"
+url1  <- "https://api.jivesoftware.com/analytics/v2/export/activity/?"
 req   <- GET(paste(url1,filt1,sep=""), 
              config(httpheader=c("Authorization"= auth[1]))) # get the url
 json  <- content(req, as = "text")                           # parse
 act   <- fromJSON(json)                                      # convert from JSON
-act.list <- act$list                                         # list of activities
 
 #############################################################
 #
@@ -81,7 +84,60 @@ df <- data.frame(activityName,timestamps,datetime,actorIDs,actionObjId,
                  objectType,open,objectId,status,
                  activityType,containerType,name)
 
+### Remove Expert Forums
+df <- df[substr(df$name,nchar(df$name)-2,nchar(df$name)) != " EF", ]
+
+write.csv(df,"Unresolved Questions.csv")
+
+### now look at views
+filt2 <- paste("filter=name(activity_view_thread)&",         # get views
+                 after,
+                 "count=all",sep="")                         # get all of them
+
+req  <- GET(paste(url1,filt2,sep=""), 
+             config(httpheader=c("Authorization"= auth[1]))) # get the url
+json  <- content(req, as = "text")                           # parse
+act   <- fromJSON(json)                                      # convert from JSON
+
+activityName <- act$list$name
+actorIDs      <- act$list$actorID
+actionObjId   <- act$list$actionObjectId
+objectType    <- act$list$activity$actionObject$objectType
+objectId      <- act$list$activity$actionObject$objectId
+
+name          <- act$list$activity$destination$name
+
+df <- data.frame(activityName,actorIDs,actionObjId,
+                 objectType,objectId,name)
+
+### Remove Expert Forums
+df <- df[substr(df$name,nchar(df$name)-2,nchar(df$name)) != " EF", ]
+
+write.csv(df,"Views.csv")
+
+### Finally, look at Likes, Comments, etc. to measure popularity
+filt3 <- paste("filter=name(activity_like_thread)&",         # get views
+               "activity_like_comment",
+               "activity_update_question",
+               "activity_update_message)",
+               after,
+               "count=all",sep="")                         # get all of them
+
+req  <- GET(paste(url1,filt3,sep=""), 
+            config(httpheader=c("Authorization"= auth[1]))) # get the url
+json  <- content(req, as = "text")                           # parse
+act   <- fromJSON(json)                                      # convert from JSON
+
+activityName <- act$list$name
+actionObjId   <- act$list$actionObjectId
+objectType    <- act$list$activity$actionObject$objectType
+objectId      <- act$list$activity$actionObject$objectId
+name          <- act$list$activity$destination$name
+
+df <- data.frame(activityName,actionObjId,
+                 objectType,objectId,name)
+
 # Remove Expert Forums
 df <- df[substr(df$name,nchar(df$name)-2,nchar(df$name)) != " EF", ]
 
-write.csv(df,"fof.csv")
+write.csv(df,"Likes.csv")
